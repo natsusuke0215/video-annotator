@@ -127,6 +127,18 @@ body { display: flex; height: 100vh; }
   scrollbar-width: thin;
   scrollbar-color: var(--bg-hover) transparent;
 }
+
+#btn-suggest-ai {
+  background: #4ade80;  /* Green như accent */
+  color: #0d1a0d;
+  font-weight: 600;
+  margin-left: 8px;  /* Khoảng cách với button Undo */
+}
+#btn-suggest-ai:hover {
+  background: #6edb94;
+  box-shadow: 0 0 0 3px rgba(74,222,128,0.25);
+}
+
 #video-list-empty {
   padding: 24px 14px;
   text-align: center;

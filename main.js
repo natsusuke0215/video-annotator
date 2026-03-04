@@ -1,7 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { execFile, exec } = require('child_process');
+const { execFile, exec, spawn } = require('child_process');
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -111,5 +111,57 @@ ipcMain.handle('get-video-info', async (_event, videoPath) => {
         }
       }
     );
+  });
+});
+
+ipcMain.handle('suggest-splits', async (event, videoPath) => {
+  return new Promise((resolve) => {
+    const pythonPath = 'D:\\PythonProject\\NNKH\\.venv\\Scripts\\python.exe';
+    const scriptPath = path.join(__dirname, 'suggest_splits.py');
+
+    console.log(`--- Khởi chạy AI cho: ${videoPath} ---`);
+
+    // Dùng spawn để nhận dữ liệu liên tục (real-time)
+    const pyProcess = spawn(pythonPath, [scriptPath, videoPath]);
+
+    let stdoutData = '';
+    let stderrData = '';
+
+    pyProcess.stdout.on('data', (data) => {
+      stdoutData += data.toString();
+    });
+
+    pyProcess.stderr.on('data', (data) => {
+      const msg = data.toString();
+      stderrData += msg;
+
+      // Bắt dòng PROGRESS:XX từ Python
+      if (msg.includes("PROGRESS:")) {
+        const parts = msg.split("PROGRESS:");
+        const percent = parts[parts.length - 1].trim().split('\n')[0];
+        // Gửi phần trăm về giao diện
+        event.sender.send('ai-progress', percent);
+      }
+      console.log(`[Python]: ${msg.trim()}`);
+    });
+
+    pyProcess.on('close', (code) => {
+      if (code !== 0) {
+        console.error("Lỗi script Python:", stderrData);
+        resolve({ ok: false, error: stderrData });
+        return;
+      }
+
+      try {
+        // Trích xuất JSON từ stdout
+        const jsonMatch = stdoutData.match(/\{.*\}/s);
+        if (!jsonMatch) throw new Error("Không tìm thấy JSON trong kết quả");
+
+        const result = JSON.parse(jsonMatch[0]);
+        resolve({ ok: true, data: result });
+      } catch (e) {
+        resolve({ ok: false, error: "Lỗi xử lý kết quả AI" });
+      }
+    });
   });
 });
