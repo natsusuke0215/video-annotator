@@ -10,8 +10,8 @@ const state = {
     duration: 0,
     fps: 30,
     speed: 1,
-    saved: true,
-    videoInfo: null,
+    saved: true,         // Ban đầu true, nhưng sẽ set false cho video mới
+    // videoInfo: null,  // Không dùng, có thể remove
 };
 
 const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2];
@@ -46,6 +46,14 @@ const segmentsCount = document.getElementById('segments-count');
 const statTotal = document.getElementById('stat-total');
 const statDone = document.getElementById('stat-done');
 
+// Tạo button Suggest AI
+const btnSuggestAI = document.createElement('button');
+btnSuggestAI.id = 'btn-suggest-ai';
+btnSuggestAI.textContent = 'Suggest by AI';
+btnSuggestAI.className = 'btn';  // Style theo CSS, e.g., green button
+window.api.onAIProgress((percent) => {
+    btnSuggestAI.textContent = `Analyzing... ${percent}%`;
+});
 // ctx for canvas
 let ctx = null;
 
@@ -63,6 +71,7 @@ function markUnsaved() {
     saveStatus.textContent = 'unsaved';
     saveStatus.className = 'badge badge-unsaved';
 }
+
 function markSaved() {
     state.saved = true;
     saveStatus.textContent = 'saved';
@@ -124,6 +133,8 @@ function addSplit(ts) {
     markUnsaved();
     renderSplitsList();
     drawTimeline();
+    // Sau khi add split thủ công, ẩn button AI nếu đang hiển thị
+    if (state.splits.length > 0) btnSuggestAI.style.display = 'none';
 }
 
 function removeSplit(ts) {
@@ -131,6 +142,8 @@ function removeSplit(ts) {
     markUnsaved();
     renderSplitsList();
     drawTimeline();
+    // Nếu remove hết splits, show button lại nếu chưa saved
+    if (state.splits.length === 0 && !state.saved) btnSuggestAI.style.display = 'block';
 }
 
 function undoLastSplit() {
@@ -140,6 +153,8 @@ function undoLastSplit() {
     renderSplitsList();
     drawTimeline();
     flashStatus('Undone');
+    // Tương tự remove, check để show button nếu cần
+    if (state.splits.length === 0 && !state.saved) btnSuggestAI.style.display = 'block';
 }
 
 function renderSplitsList() {
@@ -216,6 +231,8 @@ async function saveAnnotation() {
         const li = videoList.querySelector(`li[data-index="${state.currentIndex}"]`);
         if (li) li.classList.add('annotated');
         updateStats();
+        // Sau save, ẩn button AI
+        btnSuggestAI.style.display = 'none';
     } else {
         alert('Save failed: ' + res.error);
     }
@@ -226,11 +243,11 @@ async function loadAnnotation(videoEntry) {
     if (existing && Array.isArray(existing.splits)) {
         state.splits = existing.splits;
         flashStatus('Resumed');
+        return true;  // Trả về true nếu resumed
     } else {
         state.splits = [];
+        return false;  // False nếu mới
     }
-    renderSplitsList();
-    drawTimeline();
 }
 
 // ─── Video Loading ────────────────────────────────────────────────────────────
@@ -265,14 +282,29 @@ async function loadVideo(index) {
     placeholder.style.display = 'none';
 
     // Load annotation first (before metadata)
-    await loadAnnotation(v);
-    markSaved();
+    const isResumed = await loadAnnotation(v);
+
+    // Chỉ markSaved nếu resumed (có existing splits), иначе markUnsaved cho video mới
+    if (isResumed) {
+        markSaved();
+    } else {
+        markUnsaved();  // Set saved=false cho video mới để show button
+    }
 
     // Get info via ffprobe (fallback to video element metadata)
     const info = await window.api.getVideoInfo(v.fullPath);
     state.fps = info.fps || 30;
     if (info.duration) {
         state.duration = info.duration;
+    }
+
+    // Toggle button Suggest AI: Chỉ show nếu chưa có splits và chưa saved (video mới)
+    if (state.splits.length === 0 && !state.saved) {
+        btnSuggestAI.style.display = 'block';
+        console.log('Showing Suggest AI button');  // Debug: Check console
+    } else {
+        btnSuggestAI.style.display = 'none';
+        console.log('Hiding Suggest AI button');  // Debug
     }
 }
 
@@ -358,6 +390,7 @@ function cycleSpeedUp() {
     const cur = SPEEDS.indexOf(state.speed);
     if (cur < SPEEDS.length - 1) setSpeed(SPEEDS[cur + 1]);
 }
+
 function cycleSpeedDown() {
     const cur = SPEEDS.indexOf(state.speed);
     if (cur > 0) setSpeed(SPEEDS[cur - 1]);
@@ -456,10 +489,51 @@ btnSeekFwd.addEventListener('click', () => { video.currentTime = Math.min(state.
 btnSeekBwdFine.addEventListener('click', () => { video.currentTime = Math.max(0, video.currentTime - 0.2); });
 btnSeekFwdFine.addEventListener('click', () => { video.currentTime = Math.min(state.duration, video.currentTime + 0.2); });
 
+// Listener cho Suggest AI
+btnSuggestAI.addEventListener('click', async () => {
+    if (state.currentIndex < 0) return;
+
+    // Khóa nút và đổi trạng thái
+    btnSuggestAI.disabled = true;
+    btnSuggestAI.textContent = 'Analyzing... 0%';
+    saveStatus.textContent = 'AI is processing...';
+    saveStatus.className = 'badge badge-unsaved';
+
+    const v = state.videos[state.currentIndex];
+
+    try {
+        const res = await window.api.suggestSplits(v.fullPath);
+
+        if (res.ok) {
+            state.splits = res.data.splits || [];
+            renderSplitsList();
+            drawTimeline();
+            markUnsaved();
+            flashStatus('AI Suggestions Loaded');
+            btnSuggestAI.style.display = 'none'; // Ẩn nút khi xong
+        } else {
+            alert('AI Error: ' + res.error);
+        }
+    } catch (err) {
+        console.error(err);
+        alert('System Error occurred');
+    } finally {
+        btnSuggestAI.disabled = false;
+        btnSuggestAI.textContent = 'Suggest by AI';
+    }
+});
+
 // ─── Init ─────────────────────────────────────────────────────────────────────
 window.addEventListener('load', () => {
+    // Append button Suggest AI một lần khi load app - append vào #transport để nằm cùng controls
+    const controlsContainer = document.getElementById('transport') || document.body;  // #transport tồn tại trong index.html
+    controlsContainer.appendChild(btnSuggestAI);
+    // Ban đầu ẩn button đến khi load video phù hợp
+    btnSuggestAI.style.display = 'none';
+
     resizeCanvas();
 });
+
 window.addEventListener('resize', () => {
     resizeCanvas();
 });
@@ -468,3 +542,7 @@ window.addEventListener('resize', () => {
 if (typeof ResizeObserver !== 'undefined') {
     new ResizeObserver(resizeCanvas).observe(timelineTrack);
 }
+
+window.api.onAIProgress((percent) => {
+    btnSuggestAI.textContent = `Analyzing... ${percent}%`;
+});

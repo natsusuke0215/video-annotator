@@ -7,4 +7,6 @@ contextBridge.exposeInMainWorld('api', {
     loadJson: (jsonPath) => ipcRenderer.invoke('load-json', jsonPath),
     saveJson: (jsonPath, data) => ipcRenderer.invoke('save-json', jsonPath, data),
     getVideoInfo: (videoPath) => ipcRenderer.invoke('get-video-info', videoPath),
+    suggestSplits: (videoPath) => ipcRenderer.invoke('suggest-splits', videoPath),
+    onAIProgress: (callback) => ipcRenderer.on('ai-progress', (event, percent) => callback(percent)),
 });
