@@ -66,7 +66,7 @@ def cut_segment(ffmpeg, video_path, start, end, out_path):
     ]
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
-        print(f"\n  ✗ Error:\n{result.stderr[-600:]}")
+        print(f"\n  Error:\n{result.stderr[-600:]}")
         return False
     return True
 
@@ -122,14 +122,11 @@ def main():
     ext  = os.path.splitext(video_name)[1] or '.mp4'
 
     # ── Print summary ────────────────────────────────────────────────────────
-    print(f"\n{'─'*55}")
-    print(f"  Video Annotator — Cut Video")
-    print(f"{'─'*55}")
-    print(f"  Source     : {os.path.basename(video_path)}")
-    print(f"  Duration   : {duration:.2f}s")
-    print(f"  Splits     : {len(splits)}  →  {len(segments)} segments")
-    print(f"  Output dir : {out_dir}")
-    print(f"{'─'*55}\n")
+    print(f"\nVideo Annotator - Cut Video")
+    print(f"Source     : {os.path.basename(video_path)}")
+    print(f"Duration   : {duration:.2f}s")
+    print(f"Splits     : {len(splits)}  →  {len(segments)} segments")
+    print(f"Output dir : {out_dir}\n")
 
     ok = skip = fail = 0
     for i, (start, end) in enumerate(segments):
@@ -141,17 +138,17 @@ def main():
             skip += 1
             continue
 
-        label = f"  [{i+1:03d}/{len(segments)}] CUT   {start:.2f}s → {end:.2f}s  → {out_name}"
+        label = f"  [{i+1:03d}/{len(segments)}] CUT   {start:.2f}s -> {end:.2f}s  -> {out_name}"
         print(label, end='', flush=True)
         if cut_segment(ffmpeg, video_path, start, end, out_path):
-            print('  ✓')
+            print('  OK')
             ok += 1
         else:
-            print('  ✗')
+            print('  FAIL')
             fail += 1
 
-    print(f"\n  Done: {ok} cut, {skip} skipped, {fail} failed.")
-    print(f"  Output: {out_dir}\n")
+    print(f"\nDone: {ok} cut, {skip} skipped, {fail} failed.")
+    print(f"Output: {out_dir}\n")
 
 
 if __name__ == '__main__':
